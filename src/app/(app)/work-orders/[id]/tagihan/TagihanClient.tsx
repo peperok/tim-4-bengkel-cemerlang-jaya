@@ -291,7 +291,7 @@ export function TagihanClient({
 
     setLoadingAksi(true);
     try {
-      const { data: idInvoiceBaru, error } = await supabase.rpc("terbitkan_invoice", {
+      const { error } = await supabase.rpc("terbitkan_invoice", {
         p_wo: wo.id,
       });
 
