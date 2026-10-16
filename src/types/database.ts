@@ -767,7 +767,118 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      atur_diskon: {
+        Args: { p_alasan: string; p_diskon: number; p_wo: string }
+        Returns: undefined
+      }
+      buat_work_order: {
+        Args: {
+          p_keluhan: string
+          p_kepala_mekanik_id: string
+          p_odometer: number
+          p_vehicle_id: string
+        }
+        Returns: string
+      }
+      catat_pembayaran: {
+        Args: { p_invoice: string; p_jumlah: number; p_metode: string }
+        Returns: string
+      }
+      catat_stok_masuk: {
+        Args: { p_item: string; p_jumlah: number; p_keterangan?: string }
+        Returns: undefined
+      }
+      dashboard_beban_mekanik: {
+        Args: { p_dari: string; p_sampai: string; p_tim?: string }
+        Returns: {
+          mekanik: string
+          tim: string
+          wo_aktif: number
+          wo_selesai: number
+        }[]
+      }
+      dashboard_laba_harian: {
+        Args: { p_dari: string; p_sampai: string }
+        Returns: {
+          laba: number
+          modal: number
+          pendapatan: number
+          tanggal: string
+        }[]
+      }
+      dashboard_pendapatan_harian: {
+        Args: { p_dari: string; p_sampai: string }
+        Returns: {
+          pendapatan_jasa: number
+          pendapatan_part: number
+          tanggal: string
+        }[]
+      }
+      dashboard_ringkasan: {
+        Args: { p_dari: string; p_sampai: string }
+        Returns: Json
+      }
+      dashboard_top_item: {
+        Args: { p_dari: string; p_jenis?: string; p_sampai: string }
+        Returns: {
+          jumlah: number
+          nama: string
+          pendapatan: number
+        }[]
+      }
+      dashboard_wo_per_status: {
+        Args: { p_tim?: string }
+        Returns: {
+          jumlah: number
+          status: string
+        }[]
+      }
+      dashboard_wo_selesai_harian: {
+        Args: { p_dari: string; p_sampai: string }
+        Returns: {
+          jumlah: number
+          tanggal: string
+        }[]
+      }
+      hapus_item_tagihan: {
+        Args: { p_billing_item: string }
+        Returns: undefined
+      }
+      laporan_laba: {
+        Args: { p_dari: string; p_sampai: string }
+        Returns: {
+          laba: number
+          margin_persen: number
+          modal: number
+          nomor_invoice: string
+          nomor_wo: string
+          pendapatan: number
+          plat: string
+          tanggal: string
+          work_order_id: string
+        }[]
+      }
+      sesuaikan_harga_item: {
+        Args: { p_alasan: string; p_billing_item: string; p_harga: number }
+        Returns: boolean
+      }
+      sesuaikan_stok: {
+        Args: { p_alasan: string; p_item: string; p_stok_fisik: number }
+        Returns: undefined
+      }
+      tambah_item_tagihan: {
+        Args: { p_item: string; p_jumlah: number; p_wo: string }
+        Returns: string
+      }
+      terbitkan_invoice: { Args: { p_wo: string }; Returns: string }
+      tugaskan_mekanik: {
+        Args: { p_estimasi: string; p_mekanik: string[]; p_wo: string }
+        Returns: undefined
+      }
+      ubah_status_wo: {
+        Args: { p_catatan?: string; p_status: string; p_wo: string }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never
