@@ -1,5 +1,7 @@
-import { KerangkaFitur } from "@/components/KerangkaFitur";
+import { ambilProfilSaya } from "@/lib/profil";
+import { DashboardClient } from "./DashboardClient";
 
-export default function Dashboard() {
-  return <KerangkaFitur fitur="D" judul="Dashboard" rujukan="Bab 12" />;
+export default async function Dashboard() {
+  const profil = await ambilProfilSaya();
+  return <DashboardClient peran={profil.peran} profilId={profil.id} />;
 }
