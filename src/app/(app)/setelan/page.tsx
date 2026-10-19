@@ -1,8 +1,10 @@
 import { ShieldAlert } from "lucide-react";
+import { headers } from "next/headers";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ambilProfilSaya } from "@/lib/profil";
 import { createClient } from "@/lib/supabase/server";
 import { FormSetelan, type WorkshopSettingsData } from "./FormSetelan";
+import { SetelanPaymentGateway } from "./SetelanPaymentGateway";
 
 export default async function HalamanSetelan() {
   const profil = await ambilProfilSaya();
@@ -56,16 +58,42 @@ export default async function HalamanSetelan() {
     galeri_paths: (rawSettings.galeri_paths as string[]) ?? [],
   };
 
+  // Cek konfigurasi Payment Gateway Mayar di server (tanpa menampilkan nilainya)
+  const mayarApiKeyTersedia = Boolean(process.env.MAYAR_API_KEY && process.env.MAYAR_API_KEY.trim() !== "");
+  const mayarBaseUrl = process.env.MAYAR_BASE_URL || "https://api.mayar.club";
+  const isSandbox = mayarBaseUrl.includes("sandbox") || mayarBaseUrl.includes("mayar.club") || mayarBaseUrl.includes("mayar.io");
+
+  // Susun URL Webhook aplikasi berdasarkan domain host aktif
+  const headersList = await headers();
+  const host = headersList.get("host") || "localhost:3000";
+  const proto = headersList.get("x-forwarded-proto") || (host.startsWith("localhost") ? "http" : "https");
+  const webhookUrl = `${proto}://${host}/api/webhook/mayar`;
+
+  // Ambil 10 baris terakhir mayar_webhook_log (hanya bisa dibaca Owner via RLS)
+  const { data: webhookLogs } = await supabase
+    .from("mayar_webhook_log")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(10);
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div>
         <h1 className="text-2xl font-semibold text-text">Setelan Bengkel</h1>
         <p className="text-sm text-muted-foreground">
-          Kelola profil bengkel, logo identitas, dan galeri foto halaman depan.
+          Kelola profil bengkel, logo identitas, galeri foto, dan integrasi payment gateway.
         </p>
       </div>
 
       <FormSetelan settings={settings} />
+
+      {/* Bagian Payment Gateway khusus Owner */}
+      <SetelanPaymentGateway
+        terhubung={mayarApiKeyTersedia}
+        modeSandbox={isSandbox}
+        webhookUrl={webhookUrl}
+        logs={webhookLogs ?? []}
+      />
     </div>
   );
 }

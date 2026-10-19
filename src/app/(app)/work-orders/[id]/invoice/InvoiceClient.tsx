@@ -68,13 +68,83 @@ export function InvoiceClient({
   const [metodeBayar, setMetodeBayar] = useState<"tunai" | "transfer" | "qris">("tunai");
   const [jumlahBayarInput, setJumlahBayarInput] = useState("");
   const [loadingBayar, setLoadingBayar] = useState(false);
+  const [loadingBayarOnline, setLoadingBayarOnline] = useState(false);
+
+  // Status invoice lokal untuk mendukung auto-refresh real-time hasil polling
+  const [currentInvoice, setCurrentInvoice] = useState<InvoiceDetail>(invoice);
 
   const isAdminOrOwner = peran === "admin" || peran === "owner";
-  const sisaTagihan = Math.max(0, invoice.total - invoice.terbayar);
-  const isLunas = invoice.status_bayar === "lunas" || sisaTagihan === 0;
+  const sisaTagihan = Math.max(0, currentInvoice.total - currentInvoice.terbayar);
+  const isLunas = currentInvoice.status_bayar === "lunas" || sisaTagihan === 0;
 
   function cetakInvoice() {
     window.print();
+  }
+
+  // Polling status invoice setiap 5 detik selama 5 menit (60 kali x 5 detik)
+  const mulaiPollingInvoice = () => {
+    let count = 0;
+    const maxPolling = 60; // 5 menit
+    const interval = setInterval(async () => {
+      count++;
+      try {
+        const { data: refreshed, error } = await supabase
+          .from("invoices")
+          .select("*, payments(*)")
+          .eq("id", currentInvoice.id)
+          .single();
+
+        if (!error && refreshed) {
+          setCurrentInvoice(refreshed);
+          if (refreshed.status_bayar === "lunas") {
+            clearInterval(interval);
+            toast.success("Pembayaran berhasil diverifikasi! Tagihan telah lunas.");
+            router.refresh();
+            return;
+          }
+        }
+      } catch {
+        // Abaikan kegagalan jaringan sementara saat polling
+      }
+
+      if (count >= maxPolling) {
+        clearInterval(interval);
+      }
+    }, 5000);
+  };
+
+  async function handleBayarOnline() {
+    setLoadingBayarOnline(true);
+    try {
+      const res = await fetch("/api/pembayaran/buat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          invoice_id: currentInvoice.id,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || "Gagal membuat link pembayaran online");
+        return;
+      }
+
+      if (data.tautan) {
+        toast.info("Membuka halaman pembayaran Mayar...");
+        window.open(data.tautan, "_blank");
+        // Mulai polling selama 5 menit untuk mengecek status lunas
+        mulaiPollingInvoice();
+      } else {
+        toast.error("Tautan pembayaran tidak diterima dari server");
+      }
+    } catch {
+      toast.error("Terjadi kesalahan saat menghubungi layanan pembayaran");
+    } finally {
+      setLoadingBayarOnline(false);
+    }
   }
 
   async function handleSimpanPembayaran() {
@@ -91,7 +161,7 @@ export function InvoiceClient({
     setLoadingBayar(true);
     try {
       const { error } = await supabase.rpc("catat_pembayaran", {
-        p_invoice: invoice.id,
+        p_invoice: currentInvoice.id,
         p_metode: metodeBayar,
         p_jumlah: jumlahAngka,
       });
@@ -153,19 +223,32 @@ export function InvoiceClient({
 
         <div className="flex flex-wrap items-center gap-2">
           {isAdminOrOwner && !isLunas && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5 border-success text-success hover:bg-success/10"
-              onClick={() => {
-                setJumlahBayarInput(String(sisaTagihan));
-                setMetodeBayar("tunai");
-                setBukaCatatBayar(true);
-              }}
-            >
-              <DollarSign className="size-4" />
-              Catat Pembayaran
-            </Button>
+            <>
+              <Button
+                variant="default"
+                size="sm"
+                className="gap-1.5 bg-blue-600 text-white hover:bg-blue-700"
+                disabled={loadingBayarOnline}
+                onClick={handleBayarOnline}
+              >
+                <DollarSign className="size-4" />
+                {loadingBayarOnline ? "Menghubungkan..." : "Bayar Online"}
+              </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5 border-success text-success hover:bg-success/10"
+                onClick={() => {
+                  setJumlahBayarInput(String(sisaTagihan));
+                  setMetodeBayar("tunai");
+                  setBukaCatatBayar(true);
+                }}
+              >
+                <DollarSign className="size-4" />
+                Catat Pembayaran
+              </Button>
+            </>
           )}
 
           <Button onClick={cetakInvoice} className="gap-1.5 bg-primary text-white hover:bg-primary-strong">
@@ -205,28 +288,33 @@ export function InvoiceClient({
               INVOICE
             </div>
             <div className="font-mono text-sm font-semibold text-text">
-              {invoice.nomor}
+              {currentInvoice.nomor}
             </div>
             <div className="text-xs text-text-muted">
-              Tanggal: {tanggal(invoice.diterbitkan_at)}
+              Tanggal: {tanggal(currentInvoice.diterbitkan_at)}
             </div>
-            <div className="mt-1">
+            <div className="mt-1 flex flex-col items-end gap-0.5">
               <Badge
                 variant={isLunas ? "default" : "outline"}
                 className={
                   isLunas
                     ? "bg-success text-white"
-                    : invoice.status_bayar === "sebagian"
+                    : currentInvoice.status_bayar === "sebagian"
                     ? "border-warning text-warning"
                     : "border-danger text-danger"
                 }
               >
                 {isLunas
                   ? "LUNAS"
-                  : invoice.status_bayar === "sebagian"
+                  : currentInvoice.status_bayar === "sebagian"
                   ? "DIBAYAR SEBAGIAN"
                   : "BELUM BAYAR"}
               </Badge>
+              {isLunas && currentInvoice.dibayar_online_at && (
+                <span className="text-[10px] text-text-muted">
+                  Dibayar online: {tanggal(currentInvoice.dibayar_online_at)}
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -299,13 +387,13 @@ export function InvoiceClient({
         <div className="grid grid-cols-2 gap-6 pt-6">
           {/* Riwayat Pembayaran Ringkas */}
           <div className="space-y-2 text-xs">
-            {invoice.payments && invoice.payments.length > 0 && (
+            {currentInvoice.payments && currentInvoice.payments.length > 0 && (
               <>
                 <div className="font-semibold uppercase tracking-wider text-text-muted">
                   Riwayat Pembayaran
                 </div>
                 <div className="divide-y rounded-md border text-[11px]">
-                  {invoice.payments.map((p) => (
+                  {currentInvoice.payments.map((p) => (
                     <div key={p.id} className="flex justify-between p-2">
                       <span>
                         {tanggal(p.created_at)} ({p.metode.toUpperCase()})
@@ -324,24 +412,24 @@ export function InvoiceClient({
           <div className="space-y-1.5 text-xs">
             <div className="flex justify-between">
               <span className="text-text-muted">Subtotal:</span>
-              <span className="font-mono font-medium">{rupiah(invoice.subtotal)}</span>
+              <span className="font-mono font-medium">{rupiah(currentInvoice.subtotal)}</span>
             </div>
 
-            {invoice.diskon > 0 && (
+            {currentInvoice.diskon > 0 && (
               <div className="flex justify-between text-danger">
                 <span>Diskon:</span>
-                <span className="font-mono font-medium">-{rupiah(invoice.diskon)}</span>
+                <span className="font-mono font-medium">-{rupiah(currentInvoice.diskon)}</span>
               </div>
             )}
 
             <div className="flex justify-between border-t pt-1.5 text-sm font-bold text-text">
               <span>Total:</span>
-              <span className="font-mono text-base">{rupiah(invoice.total)}</span>
+              <span className="font-mono text-base">{rupiah(currentInvoice.total)}</span>
             </div>
 
             <div className="flex justify-between text-success">
               <span>Sudah Dibayar:</span>
-              <span className="font-mono font-medium">{rupiah(invoice.terbayar)}</span>
+              <span className="font-mono font-medium">{rupiah(currentInvoice.terbayar)}</span>
             </div>
 
             <div className="flex justify-between border-t border-dashed pt-1.5 font-bold">
